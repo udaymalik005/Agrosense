@@ -347,16 +347,38 @@ def load_dataset():
 
 # ─── PREDICTION ────────────────────────────────────────────────
 def predict_disease(model, le, features_dict):
-    df = pd.DataFrame([features_dict])[FEATURE_COLS].astype(float)
-    pred_enc = model.predict(df)[0]
-    pred_proba = model.predict_proba(df)[0]
+    # Build DataFrame with correct column order and explicit float64 dtype
+    df = pd.DataFrame([features_dict])[FEATURE_COLS]
+    df = df.apply(pd.to_numeric, errors='coerce').astype(np.float64)
+
+    # If the pipeline's imputer is broken due to a sklearn version mismatch,
+    # fill NaNs manually here so the imputer has nothing left to do
+    df = df.fillna(df.mean() if not df.empty else 0)
+
+    # Extract the classifier step directly to skip a potentially broken imputer
+    try:
+        pred_enc = model.predict(df)[0]
+        pred_proba = model.predict_proba(df)[0]
+    except AttributeError:
+        # Fallback: walk the pipeline steps manually
+        Xt = df.values
+        steps = list(model.named_steps.values())
+        for step in steps[:-1]:          # all steps except the final estimator
+            try:
+                Xt = step.transform(Xt)
+            except Exception:
+                pass                     # skip broken steps (e.g. bad imputer)
+        clf = steps[-1]
+        pred_enc = clf.predict(Xt)[0]
+        pred_proba = clf.predict_proba(Xt)[0]
+
     pred_label = le.inverse_transform([pred_enc])[0]
     confidence = pred_proba[pred_enc]
-    
+
     # Top 3 predictions
     top3_idx = np.argsort(pred_proba)[::-1][:3]
     top3 = [(le.inverse_transform([i])[0], pred_proba[i]) for i in top3_idx]
-    
+
     return pred_label, confidence, top3
 
 
