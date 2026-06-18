@@ -347,7 +347,7 @@ def load_dataset():
 
 # ─── PREDICTION ────────────────────────────────────────────────
 def predict_disease(model, le, features_dict):
-    df = pd.DataFrame([features_dict])[FEATURE_COLS]
+    df = pd.DataFrame([features_dict])[FEATURE_COLS].astype(float)
     pred_enc = model.predict(df)[0]
     pred_proba = model.predict_proba(df)[0]
     pred_label = le.inverse_transform([pred_enc])[0]
